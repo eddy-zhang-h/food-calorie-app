@@ -290,15 +290,30 @@ h2 {
   gap: 12px;
 }
 
-.confidence-pill {
+.result-badges {
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+}
+
+.confidence-pill,
+.source-pill {
   min-width: 66px;
   padding: 8px 10px;
   border-radius: 999px;
-  background: rgba(216, 139, 37, 0.15);
-  color: #8a5314;
   font-size: 13px;
   font-weight: 900;
   text-align: center;
+}
+
+.confidence-pill {
+  background: rgba(216, 139, 37, 0.15);
+  color: #8a5314;
+}
+
+.source-pill {
+  background: rgba(27, 127, 100, 0.11);
+  color: var(--accent-dark);
 }
 
 label {

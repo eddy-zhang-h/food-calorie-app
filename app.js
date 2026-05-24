@@ -1,4 +1,5 @@
 const STORAGE_KEY = "calorie-camera-records-v1";
+const API_ENDPOINT = "/api/analyze-food";
 
 const FOOD_LIBRARY = [
   { name: "米饭配鸡胸肉", calories: 520, unit: "份", portion: 1, confidence: 0.76 },
@@ -30,6 +31,7 @@ const elements = {
   analyzeButton: document.querySelector("#analyzeButton"),
   mealForm: document.querySelector("#mealForm"),
   estimateTitle: document.querySelector("#estimateTitle"),
+  sourcePill: document.querySelector("#sourcePill"),
   confidencePill: document.querySelector("#confidencePill"),
   foodName: document.querySelector("#foodName"),
   portion: document.querySelector("#portion"),
@@ -119,6 +121,9 @@ function hashText(value) {
 
 const analyzerEngine = {
   async estimate({ file, imageData }) {
+    const apiEstimate = await requestRealEstimate({ imageData });
+    if (apiEstimate) return apiEstimate;
+
     const imageHash = hashText(`${file.name}-${file.size}-${file.lastModified}-${imageData.length}`);
     const selected = FOOD_LIBRARY[imageHash % FOOD_LIBRARY.length];
     const variation = ((imageHash % 17) - 8) * 8;
@@ -126,12 +131,57 @@ const analyzerEngine = {
 
     return {
       ...selected,
+      isFood: true,
       calories,
       confidence: Math.min(0.92, selected.confidence + (imageHash % 9) / 100),
-      source: "local-mock-v1"
+      notes: "演示估算结果，请手动确认。",
+      source: "demo"
     };
   }
 };
+
+async function requestRealEstimate({ imageData }) {
+  try {
+    const response = await fetch(API_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ imageData })
+    });
+
+    if (response.status === 404) return null;
+    if (!response.ok) {
+      const message = await response.text();
+      throw new Error(message || `HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+    return normalizeEstimate(data, "ai");
+  } catch (error) {
+    console.info("Using demo estimator because real analyzer is unavailable.", error);
+    showStatus("真实识别后端暂不可用，已切换为演示估算。");
+    return null;
+  }
+}
+
+function normalizeEstimate(data, fallbackSource) {
+  return {
+    isFood: Boolean(data.isFood),
+    name: data.foodName || data.name || "待确认食物",
+    calories: clampNumber(data.caloriesKcal ?? data.calories, 0, 5000, 0),
+    unit: data.portionUnit || "份",
+    portion: clampNumber(data.portion, 0.1, 20, 1),
+    confidence: clampNumber(data.confidence, 0, 1, 0.5),
+    mealType: data.mealTypeSuggestion || guessMealType(),
+    notes: data.notes || "",
+    source: data.source || fallbackSource
+  };
+}
+
+function clampNumber(value, min, max, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.min(max, Math.max(min, number));
+}
 
 async function handlePhotoChange(event) {
   const [file] = event.target.files;
@@ -179,14 +229,23 @@ async function analyzeCurrentPhoto() {
   });
 
   state.lastEstimate = estimate;
+  if (!estimate.isFood) {
+    elements.mealForm.hidden = true;
+    elements.analyzeButton.textContent = "重新估算";
+    elements.analyzeButton.disabled = false;
+    showStatus("未检测到明确食物，请换一张餐食照片再试。");
+    return;
+  }
+
   elements.estimateTitle.textContent = `${estimate.calories} kcal`;
+  elements.sourcePill.textContent = estimate.source === "ai" ? "真实识别" : "演示";
   elements.confidencePill.textContent = `${Math.round(estimate.confidence * 100)}%`;
   elements.foodName.value = estimate.name;
   elements.portion.value = estimate.portion;
   elements.portionUnit.value = estimate.unit;
   elements.calories.value = estimate.calories;
-  elements.mealType.value = guessMealType();
-  elements.notes.value = "";
+  elements.mealType.value = estimate.mealType;
+  elements.notes.value = estimate.notes;
   elements.mealForm.hidden = false;
   elements.analyzeButton.textContent = "重新估算";
   elements.analyzeButton.disabled = false;

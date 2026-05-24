@@ -5,7 +5,8 @@
 ## 功能
 
 - 拍照或上传图片，压缩后本地预览
-- 本地可替换估算引擎，返回食物名称、热量、份量和可信度
+- 支持真实视觉识别后端，返回食物名称、热量、份量和可信度
+- 未配置后端时自动回落到本地演示估算
 - 保存餐别、份量、热量和备注
 - 使用 `localStorage` 持久化历史记录
 - 今日摄入、本周摄入、日均摄入和累计记录统计
@@ -21,6 +22,43 @@ python3 -m http.server 8080
 ```
 
 然后访问 `http://localhost:8080`。
+
+## 真实识别模式
+
+真实识别需要 API key，不能把 key 放在浏览器前端。用内置 Node 后端启动：
+
+```bash
+cp .env.example .env
+```
+
+编辑 `.env`，填入 OpenAI 或 Anthropic API key。然后在同一个终端导入环境变量并启动：
+
+```bash
+set -a
+source .env
+set +a
+npm start
+```
+
+访问 `http://localhost:8081`。前端会自动调用 `/api/analyze-food`；如果后端未配置或调用失败，会显示提示并回落到演示估算。
+
+OpenAI 示例：
+
+```bash
+AI_PROVIDER=openai
+OPENAI_API_KEY=sk-your-openai-api-key
+OPENAI_MODEL=gpt-4.1-mini
+```
+
+Claude 示例：
+
+```bash
+AI_PROVIDER=anthropic
+ANTHROPIC_API_KEY=sk-ant-your-anthropic-api-key
+ANTHROPIC_MODEL=claude-sonnet-4-20250514
+```
+
+ChatGPT Plus / Claude Pro 的网页订阅不包含 API 调用额度；真实识别需要分别在 OpenAI Platform 或 Anthropic Console 配置 API 计费。
 
 ## 手机上测试
 
@@ -46,7 +84,7 @@ https://eddy-zhang-h.github.io/food-calorie-app/
 
 ## 后续扩展点
 
-- 将 `app.js` 中的 `analyzerEngine.estimate()` 替换为真实视觉模型或后端 API
+- 将后端部署到 Vercel、Render、Railway 或 Cloudflare Workers，再让 GitHub Pages 调用线上 API
 - 增加用户目标热量、营养素拆分、体重趋势等数据模型
 - 将 `localStorage` 切换为 IndexedDB 或云端账户同步
 - 加入离线缓存和真实 PWA 图标
