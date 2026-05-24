@@ -22,6 +22,28 @@ python3 -m http.server 8080
 
 然后访问 `http://localhost:8080`。
 
+## 手机上测试
+
+电脑和手机连接同一个 Wi-Fi 后，在电脑上启动静态服务：
+
+```bash
+python3 -m http.server 8081
+```
+
+查询电脑局域网 IP：
+
+```bash
+ipconfig getifaddr en0
+```
+
+手机浏览器访问 `http://电脑IP:8081`，例如 `http://192.168.1.23:8081`。
+
+GitHub Pages 地址：
+
+```text
+https://eddy-zhang-h.github.io/food-calorie-app/
+```
+
 ## 后续扩展点
 
 - 将 `app.js` 中的 `analyzerEngine.estimate()` 替换为真实视觉模型或后端 API

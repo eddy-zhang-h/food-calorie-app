@@ -45,7 +45,8 @@ const elements = {
   exportButton: document.querySelector("#exportButton"),
   clearButton: document.querySelector("#clearButton"),
   trendChart: document.querySelector("#trendChart"),
-  insightText: document.querySelector("#insightText")
+  insightText: document.querySelector("#insightText"),
+  statusMessage: document.querySelector("#statusMessage")
 };
 
 function loadRecords() {
@@ -56,8 +57,23 @@ function loadRecords() {
   }
 }
 
-function saveRecords() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state.records));
+function saveRecords(records = state.records) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+    return true;
+  } catch (error) {
+    console.warn("Unable to save records locally.", error);
+    return false;
+  }
+}
+
+function showStatus(message) {
+  elements.statusMessage.textContent = message;
+  elements.statusMessage.hidden = false;
+}
+
+function hideStatus() {
+  elements.statusMessage.hidden = true;
 }
 
 function switchTab(tabName) {
@@ -78,16 +94,23 @@ function fileToDataUrl(file) {
 async function compressImage(dataUrl) {
   const image = new Image();
   image.src = dataUrl;
-  await image.decode();
+  if (image.decode) {
+    await image.decode();
+  } else {
+    await new Promise((resolve, reject) => {
+      image.onload = resolve;
+      image.onerror = reject;
+    });
+  }
 
-  const maxSize = 900;
+  const maxSize = 520;
   const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(image.width * scale);
   canvas.height = Math.round(image.height * scale);
   const context = canvas.getContext("2d");
   context.drawImage(image, 0, 0, canvas.width, canvas.height);
-  return canvas.toDataURL("image/jpeg", 0.78);
+  return canvas.toDataURL("image/jpeg", 0.62);
 }
 
 function hashText(value) {
@@ -114,18 +137,30 @@ async function handlePhotoChange(event) {
   const [file] = event.target.files;
   if (!file) return;
 
-  const dataUrl = await fileToDataUrl(file);
-  state.currentImage = await compressImage(dataUrl);
-  state.lastEstimate = null;
+  hideStatus();
+  elements.analyzeButton.disabled = true;
+  elements.analyzeButton.textContent = "处理照片...";
 
-  elements.photoPreview.src = state.currentImage;
-  elements.photoPreview.style.display = "block";
-  elements.emptyPreview.style.display = "none";
-  elements.analyzeButton.disabled = false;
-  elements.mealForm.hidden = true;
-  elements.analyzeButton.dataset.fileName = file.name;
-  elements.analyzeButton.dataset.fileSize = file.size;
-  elements.analyzeButton.dataset.fileModified = file.lastModified;
+  try {
+    const dataUrl = await fileToDataUrl(file);
+    state.currentImage = await compressImage(dataUrl);
+    state.lastEstimate = null;
+
+    elements.photoPreview.src = state.currentImage;
+    elements.photoPreview.style.display = "block";
+    elements.emptyPreview.style.display = "none";
+    elements.mealForm.hidden = true;
+    elements.analyzeButton.dataset.fileName = file.name;
+    elements.analyzeButton.dataset.fileSize = file.size;
+    elements.analyzeButton.dataset.fileModified = file.lastModified;
+    elements.analyzeButton.disabled = false;
+    elements.analyzeButton.textContent = "开始估算";
+  } catch (error) {
+    console.error(error);
+    state.currentImage = "";
+    elements.analyzeButton.textContent = "开始估算";
+    showStatus("照片处理失败，请换一张照片或从相册选择较小的图片。");
+  }
 }
 
 async function analyzeCurrentPhoto() {
@@ -155,6 +190,7 @@ async function analyzeCurrentPhoto() {
   elements.mealForm.hidden = false;
   elements.analyzeButton.textContent = "重新估算";
   elements.analyzeButton.disabled = false;
+  elements.mealForm.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function guessMealType(date = new Date()) {
@@ -168,7 +204,7 @@ function guessMealType(date = new Date()) {
 function addRecord(event) {
   event.preventDefault();
   const record = {
-    id: crypto.randomUUID(),
+    id: getRecordId(),
     image: state.currentImage,
     foodName: elements.foodName.value.trim(),
     calories: Number(elements.calories.value),
@@ -182,10 +218,27 @@ function addRecord(event) {
   };
 
   state.records.unshift(record);
-  saveRecords();
+  const savedWithImage = saveRecords();
+  if (!savedWithImage) {
+    record.image = "";
+    const savedWithoutImage = saveRecords();
+    if (!savedWithoutImage) {
+      state.records.shift();
+      showStatus("保存失败：浏览器本地存储不可用。可以先截图记录，或换用 GitHub Pages 的 HTTPS 地址再试。");
+      return;
+    }
+    showStatus("已保存记录，但手机浏览器空间不足，照片没有一起保存。");
+  } else {
+    showStatus("已保存到历史记录。");
+  }
   resetCapture();
   render();
   switchTab("history");
+}
+
+function getRecordId() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  return `record-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 function resetCapture() {
@@ -253,9 +306,12 @@ function renderHistory() {
       const date = new Date(record.createdAt);
       const confidence = record.confidence ? ` · 可信度 ${Math.round(record.confidence * 100)}%` : "";
       const note = record.notes ? ` · ${escapeHtml(record.notes)}` : "";
+      const imageMarkup = record.image
+        ? `<img class="history-thumb" src="${record.image}" alt="${escapeHtml(record.foodName)}" />`
+        : `<div class="history-thumb placeholder" aria-hidden="true">无照片</div>`;
       return `
         <article class="history-item">
-          <img class="history-thumb" src="${record.image}" alt="${escapeHtml(record.foodName)}" />
+          ${imageMarkup}
           <div class="history-main">
             <strong>${escapeHtml(record.foodName)}</strong>
             <div class="history-meta">${record.mealType} · ${record.portion}${record.portionUnit}${confidence}</div>
