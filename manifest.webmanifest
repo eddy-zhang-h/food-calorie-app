@@ -1,0 +1,9 @@
+{
+  "name": "餐热量拍照记录",
+  "short_name": "餐热量",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f7f3ea",
+  "theme_color": "#1b7f64",
+  "icons": []
+}

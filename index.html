@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f7f3ea" />
+    <title>餐热量拍照记录</title>
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="hero-panel">
+        <div>
+          <p class="eyebrow">AI 食物热量助手</p>
+          <h1>拍一张，记录一餐</h1>
+        </div>
+        <div class="score-ring" aria-label="今日摄入统计">
+          <span id="todayCalories">0</span>
+          <small>kcal 今日</small>
+        </div>
+      </section>
+
+      <nav class="tabs" aria-label="主导航">
+        <button class="tab is-active" data-tab="capture" type="button">拍照</button>
+        <button class="tab" data-tab="history" type="button">历史</button>
+        <button class="tab" data-tab="insights" type="button">分析</button>
+      </nav>
+
+      <section class="view is-active" id="captureView">
+        <div class="camera-stage">
+          <img id="photoPreview" alt="食物照片预览" />
+          <div class="empty-preview" id="emptyPreview">
+            <span class="camera-icon" aria-hidden="true"></span>
+            <strong>拍摄或上传食物照片</strong>
+            <p>当前版本使用可替换的本地估算引擎，后续可接入真实视觉模型。</p>
+          </div>
+        </div>
+
+        <div class="capture-actions">
+          <label class="primary-action" for="photoInput">拍照 / 上传</label>
+          <input id="photoInput" accept="image/*" capture="environment" type="file" />
+          <button id="analyzeButton" class="secondary-action" disabled type="button">开始估算</button>
+        </div>
+
+        <form class="result-panel" id="mealForm" hidden>
+          <div class="result-topline">
+            <div>
+              <p class="eyebrow">估算结果</p>
+              <h2 id="estimateTitle">待确认</h2>
+            </div>
+            <div class="confidence-pill" id="confidencePill">--</div>
+          </div>
+
+          <label>
+            食物名称
+            <input id="foodName" autocomplete="off" required />
+          </label>
+
+          <div class="form-grid">
+            <label>
+              份量
+              <input id="portion" inputmode="decimal" min="0.1" step="0.1" type="number" required />
+            </label>
+            <label>
+              单位
+              <select id="portionUnit">
+                <option value="份">份</option>
+                <option value="碗">碗</option>
+                <option value="克">克</option>
+                <option value="个">个</option>
+              </select>
+            </label>
+          </div>
+
+          <label>
+            热量 kcal
+            <input id="calories" inputmode="numeric" min="1" step="1" type="number" required />
+          </label>
+
+          <label>
+            餐别
+            <select id="mealType">
+              <option value="早餐">早餐</option>
+              <option value="午餐">午餐</option>
+              <option value="晚餐">晚餐</option>
+              <option value="加餐">加餐</option>
+            </select>
+          </label>
+
+          <label>
+            备注
+            <textarea id="notes" rows="3" placeholder="例如：少油、半份、运动后"></textarea>
+          </label>
+
+          <button class="save-action" type="submit">保存记录</button>
+        </form>
+      </section>
+
+      <section class="view" id="historyView">
+        <div class="toolbar">
+          <h2>历史记录</h2>
+          <button class="icon-button" id="exportButton" title="导出 JSON" type="button" aria-label="导出 JSON">
+            <span class="download-icon" aria-hidden="true"></span>
+          </button>
+        </div>
+        <div class="history-list" id="historyList"></div>
+      </section>
+
+      <section class="view" id="insightsView">
+        <div class="metrics-grid">
+          <article>
+            <span id="weekCalories">0</span>
+            <small>本周 kcal</small>
+          </article>
+          <article>
+            <span id="averageCalories">0</span>
+            <small>日均 kcal</small>
+          </article>
+          <article>
+            <span id="recordCount">0</span>
+            <small>累计记录</small>
+          </article>
+        </div>
+
+        <div class="chart-panel">
+          <div class="toolbar">
+            <h2>7 日趋势</h2>
+            <button class="icon-button danger" id="clearButton" title="清空数据" type="button" aria-label="清空数据">
+              <span class="trash-icon" aria-hidden="true"></span>
+            </button>
+          </div>
+          <canvas id="trendChart" height="180"></canvas>
+        </div>
+
+        <div class="insight-card" id="insightText">保存几条记录后，这里会生成饮食趋势建议。</div>
+      </section>
+    </main>
+
+    <script src="./app.js" type="module"></script>
+  </body>
+</html>
