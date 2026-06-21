@@ -1,12 +1,18 @@
 const http = require("node:http");
 const fs = require("node:fs/promises");
+const fsSync = require("node:fs");
 const path = require("node:path");
 
 const ROOT = __dirname;
+
+loadLocalEnv();
+
 const PORT = Number(process.env.PORT || 8081);
 const PROVIDER = (process.env.AI_PROVIDER || "openai").toLowerCase();
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4.1-mini";
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514";
+const PACKYCODE_MODEL = process.env.PACKYCODE_MODEL || "gpt-4.1-mini";
+const PACKYCODE_BASE_URL = normalizeBaseUrl(process.env.PACKYCODE_BASE_URL || "");
 const MAX_BODY_BYTES = 7 * 1024 * 1024;
 
 const MIME_TYPES = {
@@ -20,6 +26,33 @@ const MIME_TYPES = {
   ".jpeg": "image/jpeg",
   ".svg": "image/svg+xml"
 };
+
+function loadLocalEnv() {
+  const envPath = path.join(ROOT, ".env");
+  if (!fsSync.existsSync(envPath)) return;
+
+  const lines = fsSync.readFileSync(envPath, "utf8").split(/\r?\n/);
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+
+    const separatorIndex = trimmed.indexOf("=");
+    if (separatorIndex === -1) continue;
+
+    const key = trimmed.slice(0, separatorIndex).trim();
+    const rawValue = trimmed.slice(separatorIndex + 1).trim();
+    if (!key || process.env[key] !== undefined) continue;
+
+    process.env[key] = unquoteEnvValue(rawValue);
+  }
+}
+
+function unquoteEnvValue(value) {
+  if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+    return value.slice(1, -1);
+  }
+  return value;
+}
 
 const server = http.createServer(async (request, response) => {
   try {
@@ -36,8 +69,9 @@ const server = http.createServer(async (request, response) => {
       sendJson(response, 200, {
         ok: true,
         provider: PROVIDER,
-        model: PROVIDER === "anthropic" ? ANTHROPIC_MODEL : OPENAI_MODEL,
-        configured: isProviderConfigured()
+        model: getProviderModel(),
+        configured: isProviderConfigured(),
+        needsBaseUrl: PROVIDER === "packycode" && !PACKYCODE_BASE_URL
       });
       return;
     }
@@ -56,7 +90,7 @@ const server = http.createServer(async (request, response) => {
 
 server.listen(PORT, () => {
   console.log(`Food calorie app running at http://localhost:${PORT}`);
-  console.log(`AI provider: ${PROVIDER} (${isProviderConfigured() ? "configured" : "missing API key"})`);
+  console.log(`AI provider: ${PROVIDER} (${isProviderConfigured() ? "configured" : "missing config"})`);
 });
 
 async function handleAnalyzeFood(request, response) {
@@ -76,11 +110,15 @@ async function handleAnalyzeFood(request, response) {
     return;
   }
 
-  const estimate = PROVIDER === "anthropic"
-    ? await analyzeWithAnthropic(body.imageData)
-    : await analyzeWithOpenAI(body.imageData);
+  const estimate = await analyzeImage(body.imageData);
 
   sendJson(response, 200, estimate);
+}
+
+async function analyzeImage(imageData) {
+  if (PROVIDER === "anthropic") return analyzeWithAnthropic(imageData);
+  if (PROVIDER === "packycode") return analyzeWithPackyCode(imageData);
+  return analyzeWithOpenAI(imageData);
 }
 
 async function analyzeWithOpenAI(imageData) {
@@ -144,6 +182,39 @@ async function analyzeWithAnthropic(imageData) {
   return normalizeModelJson(text, "ai");
 }
 
+async function analyzeWithPackyCode(imageData) {
+  if (!PACKYCODE_BASE_URL) {
+    throw new Error("PACKYCODE_BASE_URL is required for AI_PROVIDER=packycode");
+  }
+
+  const apiKey = process.env.PACKYCODE_API_KEY;
+  const result = await fetch(`${PACKYCODE_BASE_URL}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: PACKYCODE_MODEL,
+      temperature: 0.1,
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: buildPrompt() },
+            { type: "image_url", image_url: { url: imageData, detail: "low" } }
+          ]
+        }
+      ]
+    })
+  });
+
+  const payload = await result.json();
+  if (!result.ok) throw new Error(payload.error?.message || "PackyCode request failed");
+  const text = payload.choices?.[0]?.message?.content || "";
+  return normalizeModelJson(text, "ai");
+}
+
 function buildPrompt() {
   return [
     "你是一个谨慎的食物照片热量估算助手。",
@@ -193,8 +264,19 @@ function extractOpenAIText(payload) {
 }
 
 function isProviderConfigured() {
+  if (PROVIDER === "packycode") return Boolean(process.env.PACKYCODE_API_KEY && PACKYCODE_BASE_URL);
   if (PROVIDER === "anthropic") return Boolean(process.env.ANTHROPIC_API_KEY);
   return Boolean(process.env.OPENAI_API_KEY);
+}
+
+function getProviderModel() {
+  if (PROVIDER === "packycode") return PACKYCODE_MODEL;
+  if (PROVIDER === "anthropic") return ANTHROPIC_MODEL;
+  return OPENAI_MODEL;
+}
+
+function normalizeBaseUrl(value) {
+  return value.trim().replace(/\/+$/, "");
 }
 
 function readJsonBody(request) {

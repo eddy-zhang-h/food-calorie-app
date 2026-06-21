@@ -31,12 +31,9 @@ python3 -m http.server 8080
 cp .env.example .env
 ```
 
-编辑 `.env`，填入 OpenAI 或 Anthropic API key。然后在同一个终端导入环境变量并启动：
+编辑 `.env`，填入 OpenAI、Claude 或 PackyCode API key。然后启动：
 
 ```bash
-set -a
-source .env
-set +a
 npm start
 ```
 
@@ -57,6 +54,17 @@ AI_PROVIDER=anthropic
 ANTHROPIC_API_KEY=sk-ant-your-anthropic-api-key
 ANTHROPIC_MODEL=claude-sonnet-4-20250514
 ```
+
+PackyCode / OpenAI-compatible 示例：
+
+```bash
+AI_PROVIDER=packycode
+PACKYCODE_API_KEY=your-packycode-api-key
+PACKYCODE_MODEL=your-vision-model
+PACKYCODE_BASE_URL=https://your-packycode-openai-compatible-base-url/v1
+```
+
+PackyCode 需要提供 OpenAI-compatible 的 base URL；后端会请求 `${PACKYCODE_BASE_URL}/chat/completions`。
 
 ChatGPT Plus / Claude Pro 的网页订阅不包含 API 调用额度；真实识别需要分别在 OpenAI Platform 或 Anthropic Console 配置 API 计费。
 
