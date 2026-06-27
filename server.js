@@ -84,7 +84,7 @@ const server = http.createServer(async (request, response) => {
     await serveStatic(url.pathname, response);
   } catch (error) {
     console.error(error);
-    sendJson(response, 500, { error: "服务器处理失败。" });
+    sendJson(response, 500, { error: error.message || "服务器处理失败。" });
   }
 });
 
@@ -188,7 +188,7 @@ async function analyzeWithPackyCode(imageData) {
   }
 
   const apiKey = process.env.PACKYCODE_API_KEY;
-  const result = await fetch(`${PACKYCODE_BASE_URL}/chat/completions`, {
+  const result = await fetch(getOpenAICompatibleChatUrl(PACKYCODE_BASE_URL), {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${apiKey}`,
@@ -209,8 +209,8 @@ async function analyzeWithPackyCode(imageData) {
     })
   });
 
-  const payload = await result.json();
-  if (!result.ok) throw new Error(payload.error?.message || "PackyCode request failed");
+  const payload = await readProviderPayload(result, "PackyCode");
+  if (!result.ok) throw new Error(payload.error?.message || payload.error || "PackyCode request failed");
   const text = payload.choices?.[0]?.message?.content || "";
   return normalizeModelJson(text, "ai");
 }
@@ -267,6 +267,23 @@ function isProviderConfigured() {
   if (PROVIDER === "packycode") return Boolean(process.env.PACKYCODE_API_KEY && PACKYCODE_BASE_URL);
   if (PROVIDER === "anthropic") return Boolean(process.env.ANTHROPIC_API_KEY);
   return Boolean(process.env.OPENAI_API_KEY);
+}
+
+async function readProviderPayload(response, providerName) {
+  const text = await response.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    const preview = text.replace(/\s+/g, " ").slice(0, 140);
+    throw new Error(`${providerName} returned non-JSON response from ${response.url}: ${preview}`);
+  }
+}
+
+function getOpenAICompatibleChatUrl(baseUrl) {
+  const url = new URL(baseUrl);
+  const path = url.pathname.replace(/\/+$/, "");
+  url.pathname = path.endsWith("/v1") ? `${path}/chat/completions` : `${path}/v1/chat/completions`;
+  return url.toString();
 }
 
 function getProviderModel() {

@@ -65,6 +65,7 @@ PACKYCODE_BASE_URL=https://your-packycode-openai-compatible-base-url/v1
 ```
 
 PackyCode 需要提供 OpenAI-compatible 的 base URL；后端会请求 `${PACKYCODE_BASE_URL}/chat/completions`。
+如果填写的是根地址，例如 `https://www.packyapi.com`，后端会自动请求 `/v1/chat/completions`。
 
 ChatGPT Plus / Claude Pro 的网页订阅不包含 API 调用额度；真实识别需要分别在 OpenAI Platform 或 Anthropic Console 配置 API 计费。
 

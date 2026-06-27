@@ -150,7 +150,7 @@ async function requestRealEstimate({ imageData }) {
 
     if (response.status === 404) return null;
     if (!response.ok) {
-      const message = await response.text();
+      const message = await readErrorMessage(response);
       throw new Error(message || `HTTP ${response.status}`);
     }
 
@@ -158,8 +158,18 @@ async function requestRealEstimate({ imageData }) {
     return normalizeEstimate(data, "ai");
   } catch (error) {
     console.info("Using demo estimator because real analyzer is unavailable.", error);
-    showStatus("真实识别后端暂不可用，已切换为演示估算。");
+    showStatus(`真实识别失败，已切换为演示估算：${error.message}`);
     return null;
+  }
+}
+
+async function readErrorMessage(response) {
+  const text = await response.text();
+  try {
+    const data = JSON.parse(text);
+    return data.error || text;
+  } catch {
+    return text;
   }
 }
 
