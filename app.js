@@ -114,8 +114,12 @@ function hideStatus() {
 }
 
 async function initializeCloud() {
+  elements.cloudStatus.textContent = "连接中";
   try {
+    showStatus("正在加载账号模块...");
     firebaseApi = await import("./firebase.js");
+    elements.cloudStatus.textContent = "检查登录";
+    showStatus("账号模块已加载，正在检查登录状态...");
     firebaseApi.watchAuth(handleAuthChange);
   } catch (error) {
     firebaseApi = null;
