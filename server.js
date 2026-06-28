@@ -88,10 +88,12 @@ const server = http.createServer(async (request, response) => {
   }
 });
 
-server.listen(PORT, () => {
-  console.log(`Food calorie app running at http://localhost:${PORT}`);
-  console.log(`AI provider: ${PROVIDER} (${isProviderConfigured() ? "configured" : "missing config"})`);
-});
+if (require.main === module) {
+  server.listen(PORT, () => {
+    console.log(`Food calorie app running at http://localhost:${PORT}`);
+    console.log(`AI provider: ${PROVIDER} (${isProviderConfigured() ? "configured" : "missing config"})`);
+  });
+}
 
 async function handleAnalyzeFood(request, response) {
   if (request.method !== "POST") {
@@ -425,3 +427,17 @@ function clampNumber(value, min, max, fallback) {
 function normalizeOption(value, options, fallback) {
   return options.includes(value) ? value : fallback;
 }
+
+module.exports = {
+  analyzeImage,
+  isDataUrl,
+  isProviderConfigured,
+  getProviderModel,
+  getProviderStatus: () => ({
+    ok: true,
+    provider: PROVIDER,
+    model: getProviderModel(),
+    configured: isProviderConfigured(),
+    needsBaseUrl: PROVIDER === "packycode" && !PACKYCODE_BASE_URL
+  })
+};
