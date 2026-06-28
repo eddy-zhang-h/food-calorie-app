@@ -15,7 +15,10 @@ const FOOD_LIBRARY = [
 const state = {
   records: loadRecords(),
   currentImage: "",
-  lastEstimate: null
+  lastEstimate: null,
+  currentComponents: [],
+  capturedAt: null,
+  editingRecordId: null
 };
 
 const elements = {
@@ -37,13 +40,19 @@ const elements = {
   portion: document.querySelector("#portion"),
   portionUnit: document.querySelector("#portionUnit"),
   calories: document.querySelector("#calories"),
+  componentList: document.querySelector("#componentList"),
+  addComponentButton: document.querySelector("#addComponentButton"),
   mealType: document.querySelector("#mealType"),
   notes: document.querySelector("#notes"),
+  saveRecordButton: document.querySelector("#saveRecordButton"),
+  cancelEditButton: document.querySelector("#cancelEditButton"),
   todayCalories: document.querySelector("#todayCalories"),
   weekCalories: document.querySelector("#weekCalories"),
   averageCalories: document.querySelector("#averageCalories"),
   recordCount: document.querySelector("#recordCount"),
   historyList: document.querySelector("#historyList"),
+  historyRange: document.querySelector("#historyRange"),
+  historySearch: document.querySelector("#historySearch"),
   exportButton: document.querySelector("#exportButton"),
   clearButton: document.querySelector("#clearButton"),
   trendChart: document.querySelector("#trendChart"),
@@ -53,10 +62,20 @@ const elements = {
 
 function loadRecords() {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]").map(normalizeRecord);
   } catch {
     return [];
   }
+}
+
+function normalizeRecord(record) {
+  const calories = Math.round(Number(record.calories) || 0);
+  return {
+    ...record,
+    components: normalizeComponents(record.components, record.foodName, calories),
+    mealType: normalizeMealType(record.mealType || "午餐"),
+    calories
+  };
 }
 
 function saveRecords(records = state.records) {
@@ -133,6 +152,9 @@ const analyzerEngine = {
       ...selected,
       isFood: true,
       calories,
+      components: [
+        { name: selected.name, weightGrams: selected.unit === "克" ? selected.portion : 0, caloriesKcal: calories }
+      ],
       confidence: Math.min(0.92, selected.confidence + (imageHash % 9) / 100),
       notes: "演示估算结果，请手动确认。",
       source: "demo"
@@ -174,17 +196,43 @@ async function readErrorMessage(response) {
 }
 
 function normalizeEstimate(data, fallbackSource) {
+  const calories = clampNumber(data.caloriesKcal ?? data.calories, 0, 5000, 0);
   return {
     isFood: Boolean(data.isFood),
     name: data.foodName || data.name || "待确认食物",
-    calories: clampNumber(data.caloriesKcal ?? data.calories, 0, 5000, 0),
+    calories,
     unit: data.portionUnit || "份",
     portion: clampNumber(data.portion, 0.1, 20, 1),
     confidence: clampNumber(data.confidence, 0, 1, 0.5),
-    mealType: data.mealTypeSuggestion || guessMealType(),
+    mealType: normalizeMealType(data.mealTypeSuggestion || guessMealType()),
+    components: normalizeComponents(data.components, data.foodName || data.name, calories),
     notes: data.notes || "",
     source: data.source || fallbackSource
   };
+}
+
+function normalizeComponents(components, fallbackName, fallbackCalories) {
+  const items = Array.isArray(components) ? components : [];
+  const normalized = items
+    .map((item) => ({
+      name: String(item.name || "").trim() || "组成",
+      weightGrams: Math.round(clampNumber(item.weightGrams, 0, 3000, 0)),
+      caloriesKcal: Math.round(clampNumber(item.caloriesKcal ?? item.calories, 0, 5000, 0))
+    }))
+    .filter((item) => item.name && (item.weightGrams > 0 || item.caloriesKcal > 0))
+    .slice(0, 8);
+
+  if (normalized.length > 0) return normalized;
+  return [{
+    name: fallbackName || "整份餐食",
+    weightGrams: 0,
+    caloriesKcal: Math.round(clampNumber(fallbackCalories, 0, 5000, 0))
+  }];
+}
+
+function normalizeMealType(value) {
+  if (value === "加餐") return "零食";
+  return ["早餐", "午餐", "晚餐", "零食", "宵夜"].includes(value) ? value : guessMealType();
 }
 
 function clampNumber(value, min, max, fallback) {
@@ -200,6 +248,8 @@ async function handlePhotoChange(event) {
   hideStatus();
   elements.analyzeButton.disabled = true;
   elements.analyzeButton.textContent = "处理照片...";
+  state.capturedAt = new Date().toISOString();
+  state.editingRecordId = null;
 
   try {
     const dataUrl = await fileToDataUrl(file);
@@ -255,50 +305,69 @@ async function analyzeCurrentPhoto() {
   elements.portionUnit.value = estimate.unit;
   elements.calories.value = estimate.calories;
   elements.mealType.value = estimate.mealType;
+  state.currentComponents = normalizeComponents(estimate.components, estimate.name, estimate.calories);
+  renderComponents();
   elements.notes.value = estimate.notes;
   elements.mealForm.hidden = false;
+  elements.cancelEditButton.hidden = true;
+  elements.saveRecordButton.textContent = `保存为${estimate.mealType}摄入`;
   elements.analyzeButton.textContent = "重新估算";
   elements.analyzeButton.disabled = false;
+  showStatus(`已根据拍摄时间建议保存为${estimate.mealType}。确认后可保存为当天摄入记录。`);
   elements.mealForm.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function guessMealType(date = new Date()) {
   const hour = date.getHours();
-  if (hour < 10) return "早餐";
-  if (hour < 15) return "午餐";
-  if (hour < 21) return "晚餐";
-  return "加餐";
+  if (hour >= 5 && hour < 10) return "早餐";
+  if (hour >= 10 && hour < 14) return "午餐";
+  if (hour >= 14 && hour < 17) return "零食";
+  if (hour >= 17 && hour < 21) return "晚餐";
+  return "宵夜";
 }
 
 function addRecord(event) {
   event.preventDefault();
+  syncComponentsFromDom();
+  syncCaloriesFromComponents();
+  const existingRecord = state.records.find((item) => item.id === state.editingRecordId);
   const record = {
-    id: getRecordId(),
-    image: state.currentImage,
+    id: existingRecord?.id || getRecordId(),
+    image: state.currentImage || existingRecord?.image || "",
     foodName: elements.foodName.value.trim(),
     calories: Number(elements.calories.value),
     portion: Number(elements.portion.value),
     portionUnit: elements.portionUnit.value,
     mealType: elements.mealType.value,
     notes: elements.notes.value.trim(),
+    components: state.currentComponents,
     confidence: state.lastEstimate?.confidence ?? null,
     source: state.lastEstimate?.source ?? "manual",
-    createdAt: new Date().toISOString()
+    createdAt: existingRecord?.createdAt || state.capturedAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString()
   };
 
-  state.records.unshift(record);
+  if (existingRecord) {
+    state.records = state.records.map((item) => (item.id === record.id ? record : item));
+  } else {
+    state.records.unshift(record);
+  }
   const savedWithImage = saveRecords();
   if (!savedWithImage) {
     record.image = "";
     const savedWithoutImage = saveRecords();
     if (!savedWithoutImage) {
-      state.records.shift();
+      if (existingRecord) {
+        state.records = state.records.map((item) => (item.id === existingRecord.id ? existingRecord : item));
+      } else {
+        state.records.shift();
+      }
       showStatus("保存失败：浏览器本地存储不可用。可以先截图记录，或换用 GitHub Pages 的 HTTPS 地址再试。");
       return;
     }
     showStatus("已保存记录，但手机浏览器空间不足，照片没有一起保存。");
   } else {
-    showStatus("已保存到历史记录。");
+    showStatus(existingRecord ? "已更新历史记录。" : "已保存到历史记录。");
   }
   resetCapture();
   render();
@@ -313,6 +382,9 @@ function getRecordId() {
 function resetCapture() {
   state.currentImage = "";
   state.lastEstimate = null;
+  state.currentComponents = [];
+  state.capturedAt = null;
+  state.editingRecordId = null;
   elements.photoInput.value = "";
   elements.photoPreview.removeAttribute("src");
   elements.photoPreview.style.display = "none";
@@ -320,6 +392,120 @@ function resetCapture() {
   elements.analyzeButton.disabled = true;
   elements.analyzeButton.textContent = "开始估算";
   elements.mealForm.hidden = true;
+  elements.cancelEditButton.hidden = true;
+  elements.saveRecordButton.textContent = "保存为今日摄入";
+  elements.componentList.innerHTML = "";
+}
+
+function renderComponents() {
+  elements.componentList.innerHTML = state.currentComponents
+    .map((component, index) => `
+      <div class="component-row" data-component-index="${index}">
+        <label>
+          名称
+          <input data-component-field="name" value="${escapeHtml(component.name)}" />
+        </label>
+        <label>
+          克
+          <input data-component-field="weightGrams" inputmode="numeric" min="0" type="number" value="${component.weightGrams}" />
+        </label>
+        <label>
+          kcal
+          <input data-component-field="caloriesKcal" inputmode="numeric" min="0" type="number" value="${component.caloriesKcal}" />
+        </label>
+        <button class="component-remove" data-component-remove="${index}" type="button" aria-label="删除组成">×</button>
+      </div>
+    `)
+    .join("");
+}
+
+function addComponent() {
+  syncComponentsFromDom();
+  state.currentComponents.push({ name: "新增组成", weightGrams: 0, caloriesKcal: 0 });
+  renderComponents();
+}
+
+function removeComponent(index) {
+  syncComponentsFromDom();
+  state.currentComponents.splice(index, 1);
+  if (state.currentComponents.length === 0) {
+    state.currentComponents.push({ name: elements.foodName.value.trim() || "整份餐食", weightGrams: 0, caloriesKcal: Number(elements.calories.value) || 0 });
+  }
+  renderComponents();
+  syncCaloriesFromComponents();
+}
+
+function syncComponentsFromDom() {
+  const rows = [...elements.componentList.querySelectorAll(".component-row")];
+  state.currentComponents = rows.map((row) => ({
+    name: row.querySelector('[data-component-field="name"]').value.trim() || "组成",
+    weightGrams: Math.round(clampNumber(row.querySelector('[data-component-field="weightGrams"]').value, 0, 3000, 0)),
+    caloriesKcal: Math.round(clampNumber(row.querySelector('[data-component-field="caloriesKcal"]').value, 0, 5000, 0))
+  }));
+}
+
+function syncCaloriesFromComponents() {
+  const total = state.currentComponents.reduce((sum, item) => sum + Number(item.caloriesKcal || 0), 0);
+  if (total > 0) {
+    elements.calories.value = Math.round(total);
+    elements.estimateTitle.textContent = `${Math.round(total)} kcal`;
+  }
+}
+
+function handleComponentInput(event) {
+  if (!event.target.matches("[data-component-field]")) return;
+  syncComponentsFromDom();
+  if (event.target.dataset.componentField === "caloriesKcal") syncCaloriesFromComponents();
+}
+
+function editRecord(recordId) {
+  const record = state.records.find((item) => item.id === recordId);
+  if (!record) return;
+
+  state.editingRecordId = record.id;
+  state.currentImage = record.image || "";
+  state.capturedAt = record.createdAt;
+  state.lastEstimate = {
+    confidence: record.confidence,
+    source: record.source || "manual"
+  };
+  state.currentComponents = normalizeComponents(record.components, record.foodName, record.calories);
+
+  if (record.image) {
+    elements.photoPreview.src = record.image;
+    elements.photoPreview.style.display = "block";
+    elements.emptyPreview.style.display = "none";
+  }
+
+  elements.estimateTitle.textContent = `${record.calories} kcal`;
+  elements.sourcePill.textContent = record.source === "ai" ? "真实识别" : "手动";
+  elements.confidencePill.textContent = record.confidence ? `${Math.round(record.confidence * 100)}%` : "--";
+  elements.foodName.value = record.foodName;
+  elements.portion.value = record.portion;
+  elements.portionUnit.value = record.portionUnit;
+  elements.calories.value = record.calories;
+  elements.mealType.value = normalizeMealType(record.mealType);
+  elements.notes.value = record.notes || "";
+  renderComponents();
+
+  elements.mealForm.hidden = false;
+  elements.cancelEditButton.hidden = false;
+  elements.saveRecordButton.textContent = "保存修改";
+  elements.analyzeButton.disabled = false;
+  elements.analyzeButton.textContent = "重新估算";
+  switchTab("capture");
+  showStatus("正在编辑历史记录。保存后会更新原记录。");
+  elements.mealForm.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function deleteRecord(recordId) {
+  const record = state.records.find((item) => item.id === recordId);
+  if (!record) return;
+  const confirmed = window.confirm(`删除「${record.foodName}」这条记录？`);
+  if (!confirmed) return;
+  state.records = state.records.filter((item) => item.id !== recordId);
+  saveRecords();
+  render();
 }
 
 function sameLocalDate(dateA, dateB) {
@@ -365,16 +551,21 @@ function render() {
 }
 
 function renderHistory() {
-  if (state.records.length === 0) {
+  const records = getVisibleHistoryRecords();
+  if (records.length === 0) {
     elements.historyList.innerHTML = '<div class="empty-state">还没有记录。拍照估算并保存后，记录会出现在这里。</div>';
     return;
   }
 
-  elements.historyList.innerHTML = state.records
+  elements.historyList.innerHTML = records
     .map((record) => {
       const date = new Date(record.createdAt);
       const confidence = record.confidence ? ` · 可信度 ${Math.round(record.confidence * 100)}%` : "";
       const note = record.notes ? ` · ${escapeHtml(record.notes)}` : "";
+      const components = normalizeComponents(record.components, record.foodName, record.calories);
+      const summary = components
+        .map((item) => `${escapeHtml(item.name)} ${item.weightGrams ? `${item.weightGrams}g` : ""} ${item.caloriesKcal}kcal`)
+        .join(" / ");
       const imageMarkup = record.image
         ? `<img class="history-thumb" src="${record.image}" alt="${escapeHtml(record.foodName)}" />`
         : `<div class="history-thumb placeholder" aria-hidden="true">无照片</div>`;
@@ -385,12 +576,32 @@ function renderHistory() {
             <strong>${escapeHtml(record.foodName)}</strong>
             <div class="history-meta">${record.mealType} · ${record.portion}${record.portionUnit}${confidence}</div>
             <div class="history-meta">${formatDate(date)}${note}</div>
+            <div class="component-summary">${summary}</div>
+            <div class="history-actions">
+              <button class="text-action" data-history-edit="${record.id}" type="button">编辑</button>
+              <button class="text-action danger" data-history-delete="${record.id}" type="button">删除</button>
+            </div>
           </div>
           <div class="calorie-tag">${record.calories}<br />kcal</div>
         </article>
       `;
     })
     .join("");
+}
+
+function getVisibleHistoryRecords() {
+  const range = elements.historyRange.value;
+  const query = elements.historySearch.value.trim().toLowerCase();
+  const now = Date.now();
+  const dayMs = 24 * 60 * 60 * 1000;
+
+  return state.records.filter((record) => {
+    const recordTime = new Date(record.createdAt).getTime();
+    const inRange = range === "all" || now - recordTime <= Number(range) * dayMs;
+    const text = `${record.foodName} ${record.notes || ""} ${record.mealType}`.toLowerCase();
+    const matchesQuery = !query || text.includes(query);
+    return inRange && matchesQuery;
+  });
 }
 
 function renderInsight(dailyTotals) {
@@ -503,6 +714,32 @@ elements.tabs.forEach((tab) => tab.addEventListener("click", () => switchTab(tab
 elements.photoInput.addEventListener("change", handlePhotoChange);
 elements.analyzeButton.addEventListener("click", analyzeCurrentPhoto);
 elements.mealForm.addEventListener("submit", addRecord);
+elements.mealType.addEventListener("change", () => {
+  if (!state.editingRecordId) elements.saveRecordButton.textContent = `保存为${elements.mealType.value}摄入`;
+});
+elements.addComponentButton.addEventListener("click", addComponent);
+elements.componentList.addEventListener("input", handleComponentInput);
+elements.componentList.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-component-remove]");
+  if (!button) return;
+  removeComponent(Number(button.dataset.componentRemove));
+});
+elements.cancelEditButton.addEventListener("click", () => {
+  resetCapture();
+  showStatus("已取消编辑。");
+});
+elements.historyRange.addEventListener("change", renderHistory);
+elements.historySearch.addEventListener("input", renderHistory);
+elements.historyList.addEventListener("click", (event) => {
+  const editButton = event.target.closest("[data-history-edit]");
+  if (editButton) {
+    editRecord(editButton.dataset.historyEdit);
+    return;
+  }
+
+  const deleteButton = event.target.closest("[data-history-delete]");
+  if (deleteButton) deleteRecord(deleteButton.dataset.historyDelete);
+});
 elements.exportButton.addEventListener("click", exportRecords);
 elements.clearButton.addEventListener("click", clearRecords);
 window.addEventListener("resize", drawTrendChart);

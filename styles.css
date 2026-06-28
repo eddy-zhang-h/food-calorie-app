@@ -261,7 +261,8 @@ h2 {
 .result-panel,
 .chart-panel,
 .insight-card,
-.status-message {
+.status-message,
+.component-section {
   padding: 16px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -385,6 +386,14 @@ textarea:focus {
   margin-bottom: 12px;
 }
 
+.toolbar.compact {
+  margin-bottom: 10px;
+}
+
+.toolbar.compact h2 {
+  font-size: 17px;
+}
+
 .icon-button {
   display: grid;
   place-items: center;
@@ -397,6 +406,63 @@ textarea:focus {
 
 .icon-button.danger {
   border-color: rgba(200, 82, 85, 0.35);
+}
+
+.small-action,
+.text-action {
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.small-action {
+  padding: 0 12px;
+}
+
+.text-action {
+  padding: 0 10px;
+}
+
+.text-action.danger {
+  border-color: rgba(200, 82, 85, 0.35);
+  color: var(--rose);
+}
+
+.component-list {
+  display: grid;
+  gap: 10px;
+}
+
+.component-row {
+  display: grid;
+  grid-template-columns: 1.4fr 0.75fr 0.75fr 36px;
+  gap: 7px;
+  align-items: end;
+}
+
+.component-row label {
+  font-size: 11px;
+}
+
+.component-row input {
+  min-height: 40px;
+  padding-inline: 9px;
+}
+
+.component-remove {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  aspect-ratio: 1;
+  border: 1px solid rgba(200, 82, 85, 0.35);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--rose);
+  font-weight: 950;
 }
 
 .download-icon {
@@ -450,6 +516,13 @@ textarea:focus {
   gap: 10px;
 }
 
+.history-filters {
+  display: grid;
+  grid-template-columns: 0.85fr 1.15fr;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
 .history-item {
   align-items: stretch;
   padding: 10px;
@@ -500,6 +573,19 @@ textarea:focus {
   text-align: center;
 }
 
+.history-actions {
+  display: flex;
+  gap: 7px;
+  margin-top: 8px;
+}
+
+.component-summary {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .empty-state {
   padding: 28px 18px;
   border: 1px dashed var(--line);
@@ -536,5 +622,17 @@ canvas {
 
   .history-item {
     flex-wrap: wrap;
+  }
+
+  .component-row {
+    grid-template-columns: 1fr 0.7fr;
+  }
+
+  .component-remove {
+    width: 100%;
+  }
+
+  .history-filters {
+    grid-template-columns: 1fr;
   }
 }

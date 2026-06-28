@@ -260,10 +260,11 @@ function buildPrompt() {
     "你是一个谨慎的食物照片热量估算助手。",
     "只根据图片判断，不要假装确定看不清的内容。",
     "如果图片里没有明确食物，isFood 必须为 false，caloriesKcal 为 0。",
-    "如果是食物，估算可食用部分总热量，并给出 0 到 1 的 confidence。",
+    "如果是食物，估算可食用部分总热量，并拆分主要组成、重量和热量。",
     "只返回 JSON，不要 Markdown，不要解释。",
-    "JSON 字段：isFood, foodName, portion, portionUnit, caloriesKcal, confidence, mealTypeSuggestion, notes。",
-    "portionUnit 必须是 份、碗、克、个 之一；mealTypeSuggestion 必须是 早餐、午餐、晚餐、加餐 之一。",
+    "JSON 字段：isFood, foodName, portion, portionUnit, caloriesKcal, confidence, mealTypeSuggestion, components, notes。",
+    "components 是数组，每项字段：name, weightGrams, caloriesKcal。",
+    "portionUnit 必须是 份、碗、克、个 之一；mealTypeSuggestion 必须是 早餐、午餐、晚餐、零食、宵夜 之一。",
     "notes 用中文简短说明估算依据和不确定性。"
   ].join("\n");
 }
@@ -278,10 +279,30 @@ function normalizeModelJson(text, source) {
     portionUnit: normalizeOption(parsed.portionUnit, ["份", "碗", "克", "个"], "份"),
     caloriesKcal: isFood ? Math.round(clampNumber(parsed.caloriesKcal, 1, 5000, 300)) : 0,
     confidence: clampNumber(parsed.confidence, 0, 1, 0.4),
-    mealTypeSuggestion: normalizeOption(parsed.mealTypeSuggestion, ["早餐", "午餐", "晚餐", "加餐"], "午餐"),
+    mealTypeSuggestion: normalizeOption(parsed.mealTypeSuggestion, ["早餐", "午餐", "晚餐", "零食", "宵夜", "加餐"], "午餐"),
+    components: normalizeComponents(parsed.components, parsed.foodName, parsed.caloriesKcal),
     notes: String(parsed.notes || "").slice(0, 160),
     source
   };
+}
+
+function normalizeComponents(value, foodName, caloriesKcal) {
+  const source = Array.isArray(value) ? value : [];
+  const components = source
+    .map((item) => ({
+      name: String(item.name || "组成").slice(0, 30),
+      weightGrams: Math.round(clampNumber(item.weightGrams, 0, 3000, 0)),
+      caloriesKcal: Math.round(clampNumber(item.caloriesKcal ?? item.calories, 0, 5000, 0))
+    }))
+    .filter((item) => item.name && (item.weightGrams > 0 || item.caloriesKcal > 0))
+    .slice(0, 8);
+
+  if (components.length > 0) return components;
+  return [{
+    name: String(foodName || "整份餐食").slice(0, 30),
+    weightGrams: 0,
+    caloriesKcal: Math.round(clampNumber(caloriesKcal, 0, 5000, 0))
+  }];
 }
 
 function parseJsonFromText(text) {
