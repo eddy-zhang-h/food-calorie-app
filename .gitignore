@@ -16,4 +16,3 @@ coverage/
 .env
 .env.*
 !.env.example
-firebase-config.js

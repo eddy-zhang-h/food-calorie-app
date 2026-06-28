@@ -61,6 +61,7 @@ const elements = {
   insightText: document.querySelector("#insightText"),
   statusMessage: document.querySelector("#statusMessage"),
   cloudStatus: document.querySelector("#cloudStatus"),
+  accountStatusMessage: document.querySelector("#accountStatusMessage"),
   authForm: document.querySelector("#authForm"),
   authEmail: document.querySelector("#authEmail"),
   authPassword: document.querySelector("#authPassword"),
@@ -103,10 +104,13 @@ function saveRecords(records = state.records) {
 function showStatus(message) {
   elements.statusMessage.textContent = message;
   elements.statusMessage.hidden = false;
+  elements.accountStatusMessage.textContent = message;
+  elements.accountStatusMessage.hidden = false;
 }
 
 function hideStatus() {
   elements.statusMessage.hidden = true;
+  elements.accountStatusMessage.hidden = true;
 }
 
 async function initializeCloud() {
@@ -115,7 +119,8 @@ async function initializeCloud() {
     firebaseApi.watchAuth(handleAuthChange);
   } catch (error) {
     firebaseApi = null;
-    elements.cloudStatus.textContent = "本地模式";
+    elements.cloudStatus.textContent = "未连接";
+    showStatus(`Firebase 初始化失败：${error.message}`);
     console.info("Firebase is not configured; using local storage only.", error);
   }
 }
@@ -145,8 +150,13 @@ async function handleAuthChange(user) {
 }
 
 async function signInUser() {
+  hideStatus();
   if (!firebaseApi) {
     showStatus("Firebase 尚未配置，当前只能使用本地模式。");
+    return;
+  }
+  if (!elements.authEmail.value.trim() || elements.authPassword.value.length < 6) {
+    showStatus("请输入邮箱和至少 6 位密码。");
     return;
   }
 
@@ -158,8 +168,13 @@ async function signInUser() {
 }
 
 async function signUpUser() {
+  hideStatus();
   if (!firebaseApi) {
     showStatus("Firebase 尚未配置，当前只能使用本地模式。");
+    return;
+  }
+  if (!elements.authEmail.value.trim() || elements.authPassword.value.length < 6) {
+    showStatus("请输入邮箱和至少 6 位密码。");
     return;
   }
 
