@@ -91,6 +91,23 @@ GitHub Pages 地址：
 https://eddy-zhang-h.github.io/food-calorie-app/
 ```
 
+## 部署后端
+
+推荐先用 Render Web Service 部署完整 Node 应用。Render 会同时托管前端页面和 `/api/analyze-food` 后端接口。
+
+1. 在 Render 创建 Web Service，连接 GitHub 仓库 `eddy-zhang-h/food-calorie-app`。
+2. 选择 Blueprint 或使用仓库里的 `render.yaml`。
+3. 设置环境变量：
+
+```bash
+AI_PROVIDER=packycode
+PACKYCODE_API_KEY=你的非CC分组token
+PACKYCODE_MODEL=支持图片输入的模型名
+PACKYCODE_BASE_URL=https://www.packyapi.com/v1
+```
+
+4. 部署完成后，直接访问 Render 生成的公网 URL。不要在公网使用 GitHub Pages 地址测试真实识别，因为 GitHub Pages 不能运行 `server.js`。
+
 ## 后续扩展点
 
 - 将后端部署到 Vercel、Render、Railway 或 Cloudflare Workers，再让 GitHub Pages 调用线上 API

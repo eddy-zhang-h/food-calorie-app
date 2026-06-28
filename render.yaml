@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: food-calorie-app
+    runtime: node
+    plan: free
+    buildCommand: npm run check
+    startCommand: npm start
+    envVars:
+      - key: AI_PROVIDER
+        value: packycode
+      - key: PACKYCODE_BASE_URL
+        value: https://www.packyapi.com/v1
+      - key: PACKYCODE_API_KEY
+        sync: false
+      - key: PACKYCODE_MODEL
+        sync: false
