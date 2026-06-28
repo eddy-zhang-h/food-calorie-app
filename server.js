@@ -187,6 +187,10 @@ async function analyzeWithPackyCode(imageData) {
     throw new Error("PACKYCODE_BASE_URL is required for AI_PROVIDER=packycode");
   }
 
+  if (PACKYCODE_MODEL.startsWith("claude-")) {
+    return analyzeWithPackyCodeAnthropic(imageData);
+  }
+
   const apiKey = process.env.PACKYCODE_API_KEY;
   const result = await fetch(getOpenAICompatibleChatUrl(PACKYCODE_BASE_URL), {
     method: "POST",
@@ -212,6 +216,40 @@ async function analyzeWithPackyCode(imageData) {
   const payload = await readProviderPayload(result, "PackyCode");
   if (!result.ok) throw new Error(payload.error?.message || payload.error || "PackyCode request failed");
   const text = payload.choices?.[0]?.message?.content || "";
+  return normalizeModelJson(text, "ai");
+}
+
+async function analyzeWithPackyCodeAnthropic(imageData) {
+  const apiKey = process.env.PACKYCODE_API_KEY;
+  const { mediaType, base64 } = splitDataUrl(imageData);
+  const result = await fetch(getAnthropicCompatibleMessagesUrl(PACKYCODE_BASE_URL), {
+    method: "POST",
+    headers: {
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: PACKYCODE_MODEL,
+      max_tokens: 700,
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "image",
+              source: { type: "base64", media_type: mediaType, data: base64 }
+            },
+            { type: "text", text: buildPrompt() }
+          ]
+        }
+      ]
+    })
+  });
+
+  const payload = await readProviderPayload(result, "PackyCode");
+  if (!result.ok) throw new Error(payload.error?.message || payload.error || "PackyCode request failed");
+  const text = payload.content?.filter((item) => item.type === "text").map((item) => item.text).join("\n") || "";
   return normalizeModelJson(text, "ai");
 }
 
@@ -283,6 +321,13 @@ function getOpenAICompatibleChatUrl(baseUrl) {
   const url = new URL(baseUrl);
   const path = url.pathname.replace(/\/+$/, "");
   url.pathname = path.endsWith("/v1") ? `${path}/chat/completions` : `${path}/v1/chat/completions`;
+  return url.toString();
+}
+
+function getAnthropicCompatibleMessagesUrl(baseUrl) {
+  const url = new URL(baseUrl);
+  const path = url.pathname.replace(/\/+$/, "");
+  url.pathname = path.endsWith("/v1") ? `${path}/messages` : `${path}/v1/messages`;
   return url.toString();
 }
 
