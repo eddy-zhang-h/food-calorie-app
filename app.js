@@ -127,7 +127,7 @@ async function initializeCloud() {
 
 async function handleAuthChange(user) {
   if (!user) {
-    elements.cloudStatus.textContent = "本地模式";
+    elements.cloudStatus.textContent = "未登录";
     elements.authForm.hidden = false;
     elements.accountSummary.hidden = true;
     render();
