@@ -25,6 +25,7 @@
         <button class="tab is-active" data-tab="capture" type="button">拍照</button>
         <button class="tab" data-tab="history" type="button">历史</button>
         <button class="tab" data-tab="insights" type="button">分析</button>
+        <button class="tab" data-tab="account" type="button">账号</button>
       </nav>
 
       <section class="view is-active" id="captureView">
@@ -165,6 +166,38 @@
         </div>
 
         <div class="insight-card" id="insightText">保存几条记录后，这里会生成饮食趋势建议。</div>
+      </section>
+
+      <section class="view" id="accountView">
+        <div class="account-panel">
+          <div class="toolbar">
+            <h2>账号与云端同步</h2>
+            <span class="source-pill" id="cloudStatus">本地模式</span>
+          </div>
+
+          <form class="auth-form" id="authForm">
+            <label>
+              邮箱
+              <input id="authEmail" autocomplete="email" type="email" />
+            </label>
+            <label>
+              密码
+              <input id="authPassword" autocomplete="current-password" minlength="6" type="password" />
+            </label>
+            <div class="form-grid">
+              <button class="secondary-action" id="signInButton" type="button">登录</button>
+              <button class="save-action" id="signUpButton" type="button">注册</button>
+            </div>
+          </form>
+
+          <div class="account-summary" id="accountSummary" hidden>
+            <p id="accountEmail"></p>
+            <div class="form-grid">
+              <button class="secondary-action" id="syncLocalButton" type="button">同步本机历史</button>
+              <button class="secondary-action" id="signOutButton" type="button">退出</button>
+            </div>
+          </div>
+        </div>
       </section>
     </main>
 

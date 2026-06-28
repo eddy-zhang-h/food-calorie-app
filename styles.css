@@ -106,7 +106,7 @@ h2 {
 
 .tabs {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 7px;
   position: sticky;
   top: 0;
@@ -262,7 +262,8 @@ h2 {
 .chart-panel,
 .insight-card,
 .status-message,
-.component-section {
+.component-section,
+.account-panel {
   padding: 16px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -521,6 +522,18 @@ textarea:focus {
   grid-template-columns: 0.85fr 1.15fr;
   gap: 10px;
   margin-bottom: 12px;
+}
+
+.auth-form,
+.account-summary {
+  display: grid;
+  gap: 13px;
+}
+
+.account-summary p {
+  margin-bottom: 0;
+  color: var(--muted);
+  font-weight: 800;
 }
 
 .history-item {

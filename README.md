@@ -108,6 +108,33 @@ PACKYCODE_BASE_URL=https://www.packyapi.com/v1
 
 4. 部署完成后，直接访问 Render 生成的公网 URL。不要在公网使用 GitHub Pages 地址测试真实识别，因为 GitHub Pages 不能运行 `server.js`。
 
+## 多用户云端历史
+
+第一版多用户能力使用 Firebase Authentication + Firestore。未配置 Firebase 时，应用继续使用浏览器本地 `localStorage`。
+
+Firebase Console 需要启用：
+
+- Authentication -> Email/Password
+- Firestore Database
+
+复制配置：
+
+```bash
+cp firebase-config.example.js firebase-config.js
+```
+
+把 Firebase Web App 配置填入 `firebase-config.js`。这个文件不会提交到 Git。
+
+Firestore 数据路径：
+
+```text
+users/{uid}/mealRecords/{recordId}
+```
+
+安全规则使用仓库里的 `firestore.rules`。规则含义：用户只能读写自己的摄入记录。
+
+登录后，应用会加载云端历史；保存、编辑、删除都会同步到 Firestore。未登录时仍保存到本机浏览器。
+
 ## 后续扩展点
 
 - 将后端部署到 Vercel、Render、Railway 或 Cloudflare Workers，再让 GitHub Pages 调用线上 API

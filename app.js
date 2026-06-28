@@ -1,5 +1,6 @@
 const STORAGE_KEY = "calorie-camera-records-v1";
 const API_ENDPOINT = "/api/analyze-food";
+let firebaseApi = null;
 
 const FOOD_LIBRARY = [
   { name: "米饭配鸡胸肉", calories: 520, unit: "份", portion: 1, confidence: 0.76 },
@@ -26,7 +27,8 @@ const elements = {
   views: {
     capture: document.querySelector("#captureView"),
     history: document.querySelector("#historyView"),
-    insights: document.querySelector("#insightsView")
+    insights: document.querySelector("#insightsView"),
+    account: document.querySelector("#accountView")
   },
   photoInput: document.querySelector("#photoInput"),
   photoPreview: document.querySelector("#photoPreview"),
@@ -57,7 +59,17 @@ const elements = {
   clearButton: document.querySelector("#clearButton"),
   trendChart: document.querySelector("#trendChart"),
   insightText: document.querySelector("#insightText"),
-  statusMessage: document.querySelector("#statusMessage")
+  statusMessage: document.querySelector("#statusMessage"),
+  cloudStatus: document.querySelector("#cloudStatus"),
+  authForm: document.querySelector("#authForm"),
+  authEmail: document.querySelector("#authEmail"),
+  authPassword: document.querySelector("#authPassword"),
+  signInButton: document.querySelector("#signInButton"),
+  signUpButton: document.querySelector("#signUpButton"),
+  signOutButton: document.querySelector("#signOutButton"),
+  syncLocalButton: document.querySelector("#syncLocalButton"),
+  accountSummary: document.querySelector("#accountSummary"),
+  accountEmail: document.querySelector("#accountEmail")
 };
 
 function loadRecords() {
@@ -95,6 +107,100 @@ function showStatus(message) {
 
 function hideStatus() {
   elements.statusMessage.hidden = true;
+}
+
+async function initializeCloud() {
+  try {
+    firebaseApi = await import("./firebase.js");
+    firebaseApi.watchAuth(handleAuthChange);
+  } catch (error) {
+    firebaseApi = null;
+    elements.cloudStatus.textContent = "本地模式";
+    console.info("Firebase is not configured; using local storage only.", error);
+  }
+}
+
+async function handleAuthChange(user) {
+  if (!user) {
+    elements.cloudStatus.textContent = "本地模式";
+    elements.authForm.hidden = false;
+    elements.accountSummary.hidden = true;
+    render();
+    return;
+  }
+
+  elements.cloudStatus.textContent = "云端同步";
+  elements.authForm.hidden = true;
+  elements.accountSummary.hidden = false;
+  elements.accountEmail.textContent = user.email;
+
+  try {
+    state.records = (await firebaseApi.loadCloudRecords(user.uid)).map(normalizeRecord);
+    saveRecords();
+    render();
+    showStatus("已加载云端历史记录。");
+  } catch (error) {
+    showStatus(`云端历史加载失败：${error.message}`);
+  }
+}
+
+async function signInUser() {
+  if (!firebaseApi) {
+    showStatus("Firebase 尚未配置，当前只能使用本地模式。");
+    return;
+  }
+
+  try {
+    await firebaseApi.signIn(elements.authEmail.value.trim(), elements.authPassword.value);
+  } catch (error) {
+    showStatus(`登录失败：${error.message}`);
+  }
+}
+
+async function signUpUser() {
+  if (!firebaseApi) {
+    showStatus("Firebase 尚未配置，当前只能使用本地模式。");
+    return;
+  }
+
+  try {
+    await firebaseApi.signUp(elements.authEmail.value.trim(), elements.authPassword.value);
+  } catch (error) {
+    showStatus(`注册失败：${error.message}`);
+  }
+}
+
+async function signOutCurrentUser() {
+  if (!firebaseApi) return;
+  await firebaseApi.signOutUser();
+  showStatus("已退出账号，当前使用本地历史。");
+}
+
+async function syncLocalRecordsToCloud() {
+  const user = firebaseApi?.getCurrentUser();
+  if (!user) {
+    showStatus("请先登录再同步本机历史。");
+    return;
+  }
+
+  try {
+    await Promise.all(state.records.map((record) => firebaseApi.saveCloudRecord(user.uid, record)));
+    showStatus(`已同步 ${state.records.length} 条本机历史到云端。`);
+  } catch (error) {
+    showStatus(`同步失败：${error.message}`);
+  }
+}
+
+async function persistRecord(record) {
+  saveRecords();
+  const user = firebaseApi?.getCurrentUser();
+  if (user) await firebaseApi.saveCloudRecord(user.uid, record);
+}
+
+async function removePersistedRecord(recordId) {
+  saveRecords();
+  const user = firebaseApi?.getCurrentUser();
+  if (user) await firebaseApi.deleteCloudRecord(user.uid, recordId);
 }
 
 function switchTab(tabName) {
@@ -328,6 +434,10 @@ function guessMealType(date = new Date()) {
 
 function addRecord(event) {
   event.preventDefault();
+  saveRecordFromForm();
+}
+
+async function saveRecordFromForm() {
   syncComponentsFromDom();
   syncCaloriesFromComponents();
   const existingRecord = state.records.find((item) => item.id === state.editingRecordId);
@@ -352,10 +462,25 @@ function addRecord(event) {
   } else {
     state.records.unshift(record);
   }
-  const savedWithImage = saveRecords();
+
+  let savedWithImage = true;
+  try {
+    await persistRecord(record);
+  } catch (error) {
+    console.warn(error);
+    savedWithImage = false;
+  }
+
   if (!savedWithImage) {
     record.image = "";
-    const savedWithoutImage = saveRecords();
+    let savedWithoutImage = true;
+    try {
+      await persistRecord(record);
+    } catch (error) {
+      console.warn(error);
+      savedWithoutImage = false;
+    }
+
     if (!savedWithoutImage) {
       if (existingRecord) {
         state.records = state.records.map((item) => (item.id === existingRecord.id ? existingRecord : item));
@@ -504,8 +629,9 @@ function deleteRecord(recordId) {
   const confirmed = window.confirm(`删除「${record.foodName}」这条记录？`);
   if (!confirmed) return;
   state.records = state.records.filter((item) => item.id !== recordId);
-  saveRecords();
-  render();
+  removePersistedRecord(recordId)
+    .then(() => render())
+    .catch((error) => showStatus(`删除失败：${error.message}`));
 }
 
 function sameLocalDate(dateA, dateB) {
@@ -740,8 +866,13 @@ elements.historyList.addEventListener("click", (event) => {
   const deleteButton = event.target.closest("[data-history-delete]");
   if (deleteButton) deleteRecord(deleteButton.dataset.historyDelete);
 });
+elements.signInButton.addEventListener("click", signInUser);
+elements.signUpButton.addEventListener("click", signUpUser);
+elements.signOutButton.addEventListener("click", signOutCurrentUser);
+elements.syncLocalButton.addEventListener("click", syncLocalRecordsToCloud);
 elements.exportButton.addEventListener("click", exportRecords);
 elements.clearButton.addEventListener("click", clearRecords);
 window.addEventListener("resize", drawTrendChart);
 
 render();
+initializeCloud();
