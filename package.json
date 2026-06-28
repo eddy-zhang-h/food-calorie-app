@@ -3,7 +3,15 @@
   "version": "0.2.0",
   "private": true,
   "scripts": {
-    "start": "node server.js",
-    "check": "node --check app.js && node --check server.js"
+    "build": "vite build",
+    "start": "npm run build && node server.js",
+    "serve": "node server.js",
+    "check": "node --check app.js && node --check firebase.js && node --check server.js && node --check netlify/functions/analyze-food.js"
+  },
+  "dependencies": {
+    "firebase": "^10.12.5"
+  },
+  "devDependencies": {
+    "vite": "^5.4.11"
   }
 }

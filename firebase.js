@@ -1,12 +1,12 @@
 import { firebaseConfig } from "./firebase-config.js";
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+import { initializeApp } from "firebase/app";
 import {
   createUserWithEmailAndPassword,
   getAuth,
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signOut
-} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+} from "firebase/auth";
 import {
   collection,
   deleteDoc,
@@ -16,7 +16,7 @@ import {
   orderBy,
   query,
   setDoc
-} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+} from "firebase/firestore";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);

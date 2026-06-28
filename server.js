@@ -4,6 +4,8 @@ const fsSync = require("node:fs");
 const path = require("node:path");
 
 const ROOT = __dirname;
+const DIST_ROOT = path.join(ROOT, "dist");
+const STATIC_ROOT = fsSync.existsSync(path.join(DIST_ROOT, "index.html")) ? DIST_ROOT : ROOT;
 
 loadLocalEnv();
 
@@ -391,9 +393,9 @@ function readJsonBody(request) {
 async function serveStatic(urlPath, response) {
   const safePath = path.normalize(decodeURIComponent(urlPath)).replace(/^(\.\.[/\\])+/, "");
   const requestedPath = safePath === "/" ? "/index.html" : safePath;
-  const filePath = path.join(ROOT, requestedPath);
+  const filePath = path.join(STATIC_ROOT, requestedPath);
 
-  if (!filePath.startsWith(ROOT)) {
+  if (!filePath.startsWith(STATIC_ROOT)) {
     sendText(response, 403, "Forbidden");
     return;
   }
